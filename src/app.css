@@ -9,15 +9,20 @@
 
 Input {
   width: 1fr;
-  margin: 3 0 3 0;
+  margin: 2 0 2 0;
 }
 
 Button {
-  margin: 3 3 3 3;
+  margin: 2 2 2 2;
 }
 
 Static {
   text-align: center;
+}
+
+Digits {
+  text-align: center;
+  height: 100%;
 }
 
 .selection-button#disconnect {
@@ -48,11 +53,18 @@ Static {
   color: red;
 }
 
+.success {
+  height: 1fr;
+  display: block;
+  color: green;
+}
+
 .hidden {
   display: none;
 }
 
 .horizontal-selection {
+  layout: horizontal;
   width: 100%;
   height: auto;
   dock: bottom;

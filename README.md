@@ -14,6 +14,9 @@
 - 128: Invalid IP
 - 129: Invalid port
 - 130: Couldn't connect to server
+- 131: Incomplete fields
+- 132: Passwords don't match
+- 133: Invalid amount
 
 ### General error codes
 
