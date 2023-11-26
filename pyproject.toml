@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "telegods-client"
+version = "0.1.0"
+description = ""
+authors = ["César Montoya <cesara.montoya1@udea.edu.co>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.10.13"
+textual-dev = "^1.2.1"
+rich-pixels = "^2.1.1"
+textual = "^0.42.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
