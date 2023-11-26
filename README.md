@@ -13,6 +13,7 @@
 
 - 128: Invalid IP
 - 129: Invalid port
+- 130: Couldn't connect to server
 
 ### General error codes
 

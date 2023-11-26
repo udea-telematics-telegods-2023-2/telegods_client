@@ -1,0 +1,60 @@
+.centered-container {
+  height: 100%;
+  margin: 4 8;
+  background: $panel;
+  color: $text;
+  border: tall $background;
+  padding: 1 2;
+}
+
+Input {
+  width: 1fr;
+  margin: 3 0 3 0;
+}
+
+Button {
+  margin: 3 3 3 3;
+}
+
+Static {
+  text-align: center;
+}
+
+.selection-button#disconnect {
+  dock: bottom;
+}
+
+.large-button {
+  width: 1fr;
+}
+
+.small-button {
+  width: 20%;
+}
+
+.centered {
+  align: center middle;
+}
+
+.text {
+  text-style: bold;
+  height: 7fr;
+  content-align: center middle;
+}
+
+.error {
+  height: 1fr;
+  display: block;
+  color: red;
+}
+
+.hidden {
+  display: none;
+}
+
+.horizontal-selection {
+  width: 100%;
+  height: auto;
+  dock: bottom;
+  margin: 0 2 0 2;
+}
