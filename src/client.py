@@ -24,7 +24,11 @@ class Client:
         self.socket.settimeout(3)
         try:
             self.socket.connect((self.ip, int(self.port)))
-            return 0, ""
+            self.socket.sendall("HI\r\n".encode("utf-8"))
+            response, *data = self.socket.recv(1024).decode("utf-8").split()
+            if response == "OK":
+                return 0, data[0]
+            return 130, ""
         except ConnectionRefusedError:
             return 130, ""
         except TimeoutError:

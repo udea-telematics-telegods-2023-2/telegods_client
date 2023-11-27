@@ -33,8 +33,18 @@ def clear_fields(screen: Screen, ids: list[str]):
             dom.value = ""
 
 
+def clear_errors(screen: Screen, ids: list[str]):
+    for id in ids:
+        dom = screen.query_one(id)
+        update_hidden(True, dom)
+
+
+def handle_incomplete_fields_error(values: list):
+    return 131 if any([value == "" for value in values]) else 0
+
+
 class MainMenu(Screen):
-    TEXT = "Welcome to TeleGods Client,\nplease select which service would you like to connect to.\n\nHotkeys can be seen at all time in the bottom of the screen."
+    TEXT = "Welcome to TeleGods Client,\n\nHotkeys can be seen at all time in the bottom of the screen."
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -78,7 +88,7 @@ class ServerConnection(Screen):
         self.ip = self.default_ip
         self.port = self.default_port
         self.server_name = self.server.replace("-", " ")
-        self.TEXT = f"Please enter the IP address and port of the {self.server_name} that you're trying to connect,\nor leave empty for default values..."
+        self.TEXT = f"Please enter the IP address and port of the {self.server_name} that you're trying to connect,\nor leave empty to use the default values..."
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -129,6 +139,9 @@ class ServerConnection(Screen):
             case "back":
                 self.app.pop_screen()
             case "connect":
+                # Clear remaining errors
+                clear_errors(self.screen, ["#error128", "#error129"])
+
                 # Validate IP
                 ip_error_code, _ = CLIENT.validate_ip(self.ip)
                 update_hidden(ip_error_code == 0, self.query_one("#error128"))
@@ -138,11 +151,12 @@ class ServerConnection(Screen):
                 update_hidden(port_error_code == 0, self.query_one("#error129"))
 
                 if ip_error_code == 0 and port_error_code == 0:
-                    connection_error_code, _ = CLIENT.connect(self.ip, self.port)
+                    connection_error_code, data = CLIENT.connect(self.ip, self.port)
                     # If got any error here, it means we couldn't connect to the server
-                    if connection_error_code != 0:
+                    if connection_error_code != 0 or self.server != data:
                         self.app.push_screen(Timeout())
                         return
+
                     # Else we logged in succesfully
                     if self.server == "bank":
                         self.app.push_screen(BankLogin())
@@ -225,6 +239,9 @@ class BankLogin(Screen):
         # Clear fields on resume
         clear_fields(self.screen, ["#username", "#password"])
 
+        # Clear errors
+        clear_errors(self.screen, ["#error1", "#error131"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "username":
             self.username = event.value
@@ -243,20 +260,20 @@ class BankLogin(Screen):
                 self.app.pop_screen()
 
             case "login":
-                error_code = 0
-                # Handle incomplete fields and returns if wrong
-                if self.username == "" or self.password == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
-                    return
+                # Clear remaining errors
+                clear_errors(self.screen, ["#error1", "#error131"])
 
-                # Removes incomplete fields error
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error(
+                    [self.username, self.password]
+                )
                 update_hidden(error_code == 0, self.query_one("#error131"))
+                if error_code == 131:
+                    return
 
                 # Send login and handle error
                 error_code, uuid = CLIENT.login(self.username, self.password)
                 update_hidden(error_code == 0, self.query_one("#error1"))
-
                 if error_code == 0:
                     self.app.push_screen(BankMainMenu(uuid, self.username))
 
@@ -276,10 +293,10 @@ class BankRegister(Screen):
         yield Footer()
         yield Container(
             Static(self.TEXT, classes="text"),
+            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Static(ERROR2_TEXT, id="error2", classes="text error hidden"),
             Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
             Static(ERROR132_TEXT, id="error132", classes="text error hidden"),
-            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Input(
                 placeholder="Username",
                 id="username",
@@ -320,6 +337,9 @@ class BankRegister(Screen):
         # Clear fields on resume
         clear_fields(self.screen, ["#username", "#password", "#confirm-password"])
 
+        # Clear errors and success message
+        clear_errors(self.screen, ["#error0", "#error2", "#error131", "#error132"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "username":
             self.username = event.value
@@ -339,33 +359,28 @@ class BankRegister(Screen):
                 self.app.pop_screen()
 
             case "register":
-                error_code = 0
-                update_hidden(error_code == 0, self.query_one("#error0"))
-                # Handle incomplete fields
-                if (
-                    self.username == ""
-                    or self.password == ""
-                    or self.confirm_password == ""
-                ):
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
-                    return
+                # Clear errors and success message
+                clear_errors(
+                    self.screen, ["#error0", "#error2", "#error131", "#error132"]
+                )
 
-                # Removes incomplete fields error
-                update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error(
+                    [self.username, self.password, self.confirm_password]
+                )
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
+                    return
 
                 # Handle password mismatch
                 if self.password != self.confirm_password:
                     error_code = 132
-                    update_hidden(error_code == 0, self.query_one("#error132"))
+                    update_hidden(error_code != 132, self.query_one("#error132"))
                     return
-
-                # Removes mismatching passwords error
-                update_hidden(error_code == 0, self.query_one("#error132"))
 
                 # Send login and handle error
                 error_code, _ = CLIENT.register(self.username, self.password)
-                update_hidden(error_code == 0, self.query_one("#error2"))
+                update_hidden(error_code != 2, self.query_one("#error2"))
 
                 # Show success message
                 update_hidden(error_code != 0, self.query_one("#error0"))
@@ -406,9 +421,9 @@ class BankDeposit(Screen):
         yield Footer()
         yield Container(
             Static(self.TEXT, classes="text"),
+            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
             Static(ERROR133_TEXT, id="error133", classes="text error hidden"),
-            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Input(
                 placeholder="Amount",
                 id="amount",
@@ -434,6 +449,9 @@ class BankDeposit(Screen):
         # Clear fields on resume
         clear_fields(self.screen, ["#amount"])
 
+        # Clear errors and success message
+        clear_errors(self.screen, ["#error0", "#error131", "#error133"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         self.amount = event.value
 
@@ -448,27 +466,22 @@ class BankDeposit(Screen):
                 self.app.pop_screen()
 
             case "deposit":
-                error_code = 0
-                # Handle incomplete fields and returns if wrong
-                if self.amount == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
-                    return
+                # Clear errors and success message
+                clear_errors(self.screen, ["#error0", "#error131", "#error133"])
 
-                # Removes incomplete fields error
-                update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error([self.amount])
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
+                    return
 
                 # Send deposit
                 CLIENT.deposit(self.uuid, self.amount)
 
-                if error_code == 0:
-                    # Show success message
-                    update_hidden(error_code != 0, self.query_one("#error0"))
+                # Clear amount to deny accidental deposit
+                clear_fields(self.screen, ["#amount"])
 
-                    # Clear amount to deny accidental deposit
-                    clear_fields(self.screen, ["#amount"])
-
-                # Clear success message
+                # Show success message
                 update_hidden(error_code != 0, self.query_one("#error0"))
 
 
@@ -489,7 +502,6 @@ class BankWithdraw(Screen):
             Static(self.TEXT, classes="text"),
             Static(ERROR3_TEXT, id="error3", classes="text error hidden"),
             Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
-            Static(ERROR133_TEXT, id="error133", classes="text error hidden"),
             Static(self.ERROR0, id="error0", classes="text success hidden"),
             Input(
                 placeholder="Amount",
@@ -516,6 +528,9 @@ class BankWithdraw(Screen):
         # Clear fields on resume
         clear_fields(self.screen, ["#amount"])
 
+        # Clear errors and success message
+        clear_errors(self.screen, ["#error0", "#error3", "#error131", "#error133"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         self.amount = event.value
 
@@ -530,35 +545,32 @@ class BankWithdraw(Screen):
                 self.app.pop_screen()
 
             case "withdraw":
-                error_code = 0
-                # Handle incomplete fields and returns if wrong
-                if self.amount == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
-                    return
+                # Clear errors and success message
+                clear_errors(self.screen, ["#error0", "#error3", "#error131"])
 
-                # Removes incomplete fields error
-                update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error([self.amount])
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
+                    return
 
                 # Send withdraw and handle error
                 error_code, _ = CLIENT.withdraw(self.uuid, self.amount)
-                update_hidden(error_code == 0, self.query_one("#error3"))
+                update_hidden(error_code != 3, self.query_one("#error3"))
+
+                # Clear amount to prevent accidental withdraw
+                clear_fields(self.screen, ["#amount"])
 
                 # Show success message
-                if error_code == 0:
-                    update_hidden(error_code != 0, self.query_one("#error0"))
-
-                    # Clear amount to prevent accidental withdraw
-                    clear_fields(self.screen, ["#amount"])
-
-                # Clear success message
                 update_hidden(error_code != 0, self.query_one("#error0"))
 
 
 class BankTransfer(Screen):
     def __init__(self, uuid):
         super().__init__()
-        self.TEXT = "Please enter the UUID of the user that you want to send money to\nand the amount of money to transfer"
+        self.TEXT = (
+            "Please enter the recipient's UUID and the amount you want to transfer"
+        )
         self.ERROR0 = "Transaction succesful"
         self.uuid = uuid
         self.recv_uuid = ""
@@ -569,11 +581,10 @@ class BankTransfer(Screen):
         yield Footer()
         yield Container(
             Static(self.TEXT, classes="text"),
+            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Static(ERROR3_TEXT, id="error3", classes="text error hidden"),
             Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
-            Static(ERROR133_TEXT, id="error133", classes="text error hidden"),
             Static(ERROR252_TEXT, id="error252", classes="text error hidden"),
-            Static(self.ERROR0, id="error0", classes="text success hidden"),
             Input(
                 placeholder="Receiver UUID",
                 id="recv-uuid",
@@ -605,6 +616,9 @@ class BankTransfer(Screen):
         # Clear fields on resume
         clear_fields(self.screen, ["#recv-uuid", "#amount"])
 
+        # Clear errors and success message
+        clear_errors(self.screen, ["#error0", "#error3", "#error131", "#error252"])
+
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "recv-uuid":
             self.recv_uuid = event.value
@@ -622,43 +636,39 @@ class BankTransfer(Screen):
                 self.app.pop_screen()
 
             case "transfer":
-                # Clear success message
-                error_code = 0
-                update_hidden(error_code == 0, self.query_one("#error0"))
+                # Clear errors and success message
+                clear_errors(
+                    self.screen, ["#error0", "#error3", "#error131", "#error252"]
+                )
 
-                # Handle incomplete fields and returns if wrong
-                if self.recv_uuid == "" or self.amount == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error(
+                    [self.recv_uuid, self.amount]
+                )
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
                     return
-
-                # Removes incomplete fields error
-                update_hidden(error_code != 131, self.query_one("#error131"))
 
                 # Send transfer and handles errors
                 error_code, _ = CLIENT.transfer(
                     sender_uuid=self.uuid, recv_uuid=self.recv_uuid, amount=self.amount
                 )
 
+                # Clear amount to deny accidental double transfer
+                clear_fields(self.screen, ["#amount"])
+
                 # UUID not found
                 if error_code == 252:
-                    update_hidden(error_code == 0, self.query_one("#error252"))
+                    update_hidden(error_code != 252, self.query_one("#error252"))
                     return
 
                 # Insufficient funds
                 if error_code == 3:
-                    update_hidden(error_code == 0, self.query_one("#error3"))
-
-                # Clear errors
-                update_hidden(error_code != 252, self.query_one("#error252"))
-                update_hidden(error_code != 3, self.query_one("#error3"))
+                    update_hidden(error_code != 3, self.query_one("#error3"))
+                    return
 
                 # Show success message
-                if error_code == 0:
-                    update_hidden(error_code != 0, self.query_one("#error0"))
-
-                    # Clear amount to deny accidental double transfer
-                    clear_fields(self.screen, ["#amount"])
+                update_hidden(error_code != 0, self.query_one("#error0"))
 
 
 class BankVerifyPassword(Screen):
@@ -668,6 +678,7 @@ class BankVerifyPassword(Screen):
         self.ERROR1_TEXT = "Password doesn't match actual password"
         self.username = username
         self.password = ""
+        self.changed = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -675,6 +686,7 @@ class BankVerifyPassword(Screen):
         yield Container(
             Static(self.TEXT, classes="text"),
             Static(self.ERROR1_TEXT, id="error1", classes="text error hidden"),
+            Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
             Input(
                 placeholder="Current password",
                 id="password",
@@ -697,8 +709,14 @@ class BankVerifyPassword(Screen):
         )
 
     def on_screen_resume(self) -> None:
+        if self.changed:
+            self.app.pop_screen()
+
         # Clear fields on resume
         clear_fields(self.screen, ["#password"])
+
+        # Clear errors and success message
+        clear_errors(self.screen, ["#error1", "#error131"])
 
     def on_input_changed(self, event: Input.Changed) -> None:
         self.password = event.value
@@ -714,25 +732,25 @@ class BankVerifyPassword(Screen):
                 self.app.pop_screen()
 
             case "checkpasswd":
-                error_code = 0
-                # Handle incomplete fields and returns if wrong
-                if self.password == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
-                    return
+                # Clear errors
+                clear_errors(self.screen, ["#error1", "#error131"])
 
-                # Removes incomplete fields error
-                update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error([self.password])
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
+                    return
 
                 # Tries to login with supplied information
                 error_code, uuid = CLIENT.login(self.username, self.password)
-                update_hidden(error_code == 0, self.query_one("#error1"))
+                if error_code == 1:
+                    update_hidden(error_code != 1, self.query_one("#error1"))
+                    return
 
                 # Show success message
-                if error_code == 0:
-                    self.app.push_screen(BankChangePassword(uuid, self.password))
-
-                update_hidden(error_code != 0, self.query_one("#error0"))
+                self.changed = self.app.push_screen(
+                    BankChangePassword(uuid, self.password)
+                )
 
 
 class BankChangePassword(Screen):
@@ -750,9 +768,9 @@ class BankChangePassword(Screen):
         yield Footer()
         yield Container(
             Static(self.TEXT, classes="text"),
+            Static(self.ERROR0_TEXT, id="error0", classes="text success hidden"),
             Static(ERROR131_TEXT, id="error131", classes="text error hidden"),
             Static(ERROR132_TEXT, id="error132", classes="text error hidden"),
-            Static(self.ERROR0_TEXT, id="error0", classes="text success hidden"),
             Input(
                 placeholder="New password",
                 id="password",
@@ -798,36 +816,33 @@ class BankChangePassword(Screen):
 
         match button_id:
             case "back":
-                self.app.pop_screen()
+                self.dismiss(True)
 
             case "chpasswd":
+                # Clear errors and success message
+                clear_errors(self.screen, ["#error0", "#error131", "#error132"])
                 error_code = 0
-                # Handle incomplete fields and returns if wrong
-                if self.password == "" or self.confirm_password == "":
-                    error_code = 131
-                    update_hidden(error_code == 0, self.query_one("#error131"))
+                # Handle incomplete fields error
+                error_code = handle_incomplete_fields_error(
+                    [self.password, self.confirm_password]
+                )
+                if error_code == 131:
+                    update_hidden(error_code != 131, self.query_one("#error131"))
                     return
-
-                # Removes incomplete fields error
-                update_hidden(error_code == 0, self.query_one("#error131"))
 
                 # Handle password mismatch
                 if self.password != self.confirm_password:
                     error_code = 132
-                    update_hidden(error_code == 0, self.query_one("#error132"))
+                    update_hidden(error_code != 132, self.query_one("#error132"))
                     return
 
-                # Clear password mismatch error
-                update_hidden(error_code == 0, self.query_one("#error132"))
-
                 # Sends CHPASSWD with supplied information
+                print(self.uuid, self.old_password, self.password)
                 error_code, _ = CLIENT.chpasswd(
                     self.uuid, self.old_password, self.password
                 )
 
                 # Show success message
-                if error_code == 0:
-                    update_hidden(error_code != 0, self.query_one("#error0"))
                 update_hidden(error_code != 0, self.query_one("#error0"))
 
 
@@ -906,6 +921,6 @@ class BankMainMenu(Screen):
             case "transfer":
                 self.app.push_screen(BankTransfer(self.uuid))
             case "chpasswd":
-                self.app.push_screen(BankChangePassword(self.uuid))
+                self.app.push_screen(BankVerifyPassword(self.username))
             case "logout":
                 self.logout()
