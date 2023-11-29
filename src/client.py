@@ -29,10 +29,8 @@ class Client:
             if response == "OK":
                 return 0, data[0]
             return 130, ""
-        except ConnectionRefusedError:
+        except ConnectionRefusedError or TimeoutError:
             return 130, ""
-        except TimeoutError:
-            return 131, ""
 
     def disconnect(self) -> tuple[int, str]:
         self.socket.close()
@@ -103,4 +101,11 @@ class Client:
         response, *data = self.socket.recv(1024).decode("utf-8").split()
         if response.startswith("OK"):
             return 0, ""
+        return int(data[0]), ""
+
+    def list_liquors(self) -> tuple[int, str]:
+        self.socket.sendall("LIST\r\n".encode("utf-8"))
+        response, data = self.socket.recv(8096).decode("utf-8").split()
+        if response.startswith("OK"):
+            return 0, data
         return int(data[0]), ""

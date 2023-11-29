@@ -1,8 +1,10 @@
-from textual.app import ComposeResult
-from textual.containers import Container
+from textual.app import App, ComposeResult
+from textual.containers import Container, ScrollableContainer
 from textual.dom import DOMNode
+from textual.events import Compose
 from textual.screen import Screen
-from textual.widgets import Button, Digits, Header, Footer, Input, Static
+from textual.widgets import Button, Digits, Header, Footer, Input, Label, Static
+from json import dumps, loads
 
 from client import Client
 
@@ -79,6 +81,28 @@ class MainMenu(Screen):
         self.app.push_screen(ServerConnection(button_id))
 
 
+class TelegodsClientApp(App):
+    BINDINGS = [
+        ("ctrl+d", "toggle_dark_mode", "Toggle dark mode"),
+        ("ctrl+c", "exit", "Exit"),
+    ]
+    CSS_PATH = "app.css"
+    SCREENS = {
+        "main-menu": MainMenu(),
+    }
+
+    def on_mount(self) -> None:
+        self.title = "TeleGods Client"
+        self.sub_title = "version 0.1.0"
+        self.push_screen("main-menu")
+
+    def action_toggle_dark_mode(self):
+        self.dark = not self.dark
+
+    def action_exit(self):
+        self.app.exit()
+
+
 class ServerConnection(Screen):
     def __init__(self, server):
         super().__init__()
@@ -153,6 +177,9 @@ class ServerConnection(Screen):
                 if ip_error_code == 0 and port_error_code == 0:
                     connection_error_code, data = CLIENT.connect(self.ip, self.port)
                     # If got any error here, it means we couldn't connect to the server
+                    print(connection_error_code)
+                    print(self.server)
+                    print(data)
                     if connection_error_code != 0 or self.server != data:
                         self.app.push_screen(Timeout())
                         return
@@ -160,8 +187,9 @@ class ServerConnection(Screen):
                     # Else we logged in succesfully
                     if self.server == "bank":
                         self.app.push_screen(BankLogin())
-                    elif self.server == "liquor-store":
-                        self.app.push_screen(LiquorStoreMainMenu())
+                    elif self.server == "liquor_store":
+                        error_code, json = CLIENT.list_liquors()
+                        self.app.push_screen(LiquorStoreMainMenu(json))
 
 
 class Timeout(Screen):
@@ -181,6 +209,44 @@ class Timeout(Screen):
 
     def on_button_pressed(self, _: Button.Pressed) -> None:
         self.app.pop_screen()
+
+
+class LiquorStoreMainMenu(Screen):
+    def __init__(self, json: str):
+        super().__init__()
+        parsed_json = loads(json)
+        connected_users, OWNER_UUID = parsed_json[-2:]
+        self.liquors_list = parsed_json[:-2]
+        self.connected_users = connected_users
+        self.OWNER_UUID = OWNER_UUID
+        self.liquor_widgets = [
+            self.LiquorWidget(uuid, commercial_name, cc, stock, price)
+            for uuid, commercial_name, cc, stock, price in self.liquors_list
+        ]
+
+    TEXT = "Welcome to TeleGods Liquor Store, choose your poison!"
+
+    class LiquorWidget(Static):
+        def __init__(
+            self, uuid: str, commercial_name: str, cc: str, stock: int, price: float
+        ):
+            self.uuid = uuid
+            self.commercial_name = commercial_name
+            self.cc = cc
+            self.stock = stock
+            self.price = price
+
+        def compose(self) -> ComposeResult:
+            yield Static(self.commercial_name)
+            yield Static(f"Brought with delicacy from {self.cc}")
+            yield Static(f"{self.cc} units left in stock")
+            yield Static(f"{self.price} ＴＣ")
+
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        yield Footer()
+        yield ScrollableContainer(Static(self.TEXT, classes="text"), id="liquors")
+        self.query_one("#liquors").mount_all(self.liquor_widgets)
 
 
 class BankLogin(Screen):
