@@ -6,7 +6,7 @@ authors = ["César Montoya <cesara.montoya1@udea.edu.co>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "3.10.13"
+python = "3.10.*"
 textual-dev = "^1.2.1"
 rich-pixels = "^2.1.1"
 textual = "^0.42.0"
